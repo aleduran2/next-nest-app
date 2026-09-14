@@ -21,7 +21,8 @@ yarn-error.log*
 # Sistema
 .DS_Store
 
-# Base de datos SQLite local
+# Base de datos SQLite local (ya no se usa tras migrar a Postgres, se deja
+# por si alguien vuelve a sqlite para probar rápido)
 backend/prisma/dev.db
 backend/prisma/dev.db-journal
 backend/prisma/test.db
@@ -29,3 +30,7 @@ backend/prisma/test.db-journal
 
 # Coverage de tests
 coverage/
+
+# Archivos subidos por usuarios (avatares) — nunca se versionan
+backend/uploads/*
+!backend/uploads/.gitkeep

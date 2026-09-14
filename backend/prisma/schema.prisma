@@ -3,20 +3,27 @@ generator client {
 }
 
 datasource db {
-  // SQLite: no requiere instalar ni levantar un servidor de base de datos,
-  // queda todo en un archivo dev.db. Para producción se puede cambiar el
-  // provider a "postgresql" sin tocar el resto del código.
-  provider = "sqlite"
+  // Postgres: en local corré `docker compose up -d db` (ver docker-compose.yml)
+  // y usá la misma DATABASE_URL del .env.example. En producción (Render/
+  // Railway/Neon/Supabase) apunta a la base gestionada que te den.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  USER
+  ADMIN
+}
+
 model User {
-  id                  Int      @id @default(autoincrement())
-  email               String   @unique
-  password            String // hash con bcrypt, nunca texto plano
-  hashedRefreshToken  String? // hash del refresh token vigente, null si no hay sesión activa
-  createdAt           DateTime @default(now())
-  tasks               Task[]
+  id                 Int      @id @default(autoincrement())
+  email              String   @unique
+  password           String // hash con bcrypt, nunca texto plano
+  role               Role     @default(USER)
+  avatarUrl          String? // ruta pública del avatar subido (/uploads/xxx.png)
+  hashedRefreshToken String? // hash del refresh token vigente, null si no hay sesión activa
+  createdAt          DateTime @default(now())
+  tasks              Task[]
 }
 
 model Task {

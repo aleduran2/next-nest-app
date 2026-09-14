@@ -28,6 +28,20 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+jest.mock('@/lib/users', () => ({
+  usersApi: {
+    getMe: jest.fn().mockResolvedValue({
+      id: 1,
+      email: 'test@test.com',
+      role: 'USER',
+      avatarUrl: null,
+      createdAt: new Date().toISOString(),
+    }),
+    uploadAvatar: jest.fn(),
+  },
+  avatarSrc: (url: string | null) => url,
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
 });

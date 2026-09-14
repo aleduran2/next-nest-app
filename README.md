@@ -1,105 +1,30 @@
-# Tasks App — Next.js + NestJS + Auth JWT + Prisma
+# Tasks App — Next.js + NestJS (auth, roles, archivos, deploy)
 
-App de ejemplo full-stack: **Next.js (App Router + TypeScript + Tailwind)** consumiendo una API en **NestJS**, con **autenticación JWT** y persistencia real en **SQLite vía Prisma**.
-
-CRUD de tareas donde cada usuario solo ve y edita sus propias tareas.
+App de ejemplo full-stack: **Next.js (App Router + TypeScript + Tailwind)** consumiendo una API en **NestJS**, con autenticación JWT (access + refresh con rotación), roles (RBAC), subida de archivos, manejo de errores consistente, rate limiting, testing (unit + e2e) y Swagger. Pensada para practicar el stack y tener algo real para mostrar en un repo.
 
 ## Estructura
 
 ```
 .
-├── backend/    → API REST en NestJS (puerto 4000) + Prisma + JWT
-└── frontend/   → App en Next.js (puerto 3000)
+├── backend/     → API REST en NestJS (puerto 4000)
+├── frontend/    → App en Next.js (puerto 3000)
+└── render.yaml  → config de deploy del backend en Render
 ```
 
-## Backend — NestJS + Prisma + JWT
+## Backend — setup local
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
-npx prisma migrate dev --name init   # crea prisma/dev.db y las tablas
+docker compose up -d db              # levanta Postgres local en el puerto 5432
+npx prisma migrate dev --name init   # crea las tablas
 npm run start:dev
 ```
 
-Levanta en `http://localhost:4000`.
+Levanta en `http://localhost:4000`. Docs interactivas en `http://localhost:4000/api/docs`.
 
-### Testing
-
-Hay dos capas de tests, separadas a propósito:
-
-### Unit tests (`npm test`)
-
-```bash
-cd backend
-npm test          # corre todos los *.spec.ts
-npm run test:cov  # con reporte de coverage
-```
-
-Prueban `TasksService` y `AuthService` **con Prisma, JwtService y bcrypt mockeados** (`jest.mock`, `Test.createTestingModule` con providers falsos). No tocan ninguna base de datos ni hacen requests HTTP reales — son rápidos y deterministas, y sirven para validar la lógica de negocio (por ejemplo: "un usuario no puede editar la tarea de otro", "un refresh token ya rotado se rechaza").
-
-### E2E tests (`npm run test:e2e`)
-
-```bash
-cd backend
-npm run test:e2e
-```
-
-Levantan la aplicación NestJS completa (con Prisma real) contra una base SQLite separada (`prisma/test.db`, distinta de tu `dev.db`), y hacen requests HTTP de punta a punta con `supertest`: registro → login → crear tarea → completarla → intentar tocarla con otro usuario (403) → refrescar el token → logout. El script `pretest:e2e` se encarga de recrear `test.db` desde cero antes de cada corrida (`prisma db push`), así que siempre arranca limpia.
-
-No hace falta el backend corriendo en otra terminal para estos tests — Nest levanta una instancia de la app en memoria solo para el test.
-
-## Testing del frontend
-
-```bash
-cd frontend
-npm test          # corre todos los *.test.ts / *.test.tsx
-npm run test:watch
-```
-
-Usa **Jest + React Testing Library**, configurado con el helper oficial `next/jest` (maneja SWC, CSS y el App Router sin config manual de Babel). Todo mockeado — nunca pega contra un backend real:
-
-- `lib/auth.test.ts` — guarda/lee tokens en `localStorage`, maneja errores de login/refresh.
-- `lib/api.test.ts` — el caso más importante: verifica que ante un `401` la request se reintenta automáticamente con un token renovado, y que si el refresh también falla, limpia la sesión sin loopear.
-- `app/login/page.test.tsx`, `app/register/page.test.tsx` — completan el formulario con `@testing-library/user-event` y verifican que se llama a `auth.login`/`auth.register` y se redirige.
-- `app/page.test.tsx` — la home redirige a `/login` sin sesión, carga tareas con sesión, y permite crear una tarea nueva desde el formulario.
-
-## Documentación interactiva (Swagger)
-
-Con el backend corriendo, abrí **http://localhost:4000/api/docs** — ahí podés ver todos los endpoints, probar `/auth/register` y `/auth/login` directamente desde el navegador, copiar el `accessToken` que te devuelven, pegarlo en el botón **Authorize** (🔒) de arriba a la derecha, y a partir de ahí probar los endpoints de `/tasks` ya autenticado.
-
-### Endpoints de auth (públicos, salvo `/auth/logout`)
-
-| Método | Ruta            | Body / Auth                          | Devuelve                            |
-|--------|-----------------|----------------------------------------|--------------------------------------|
-| POST   | /auth/register  | `{ email, password }`                  | `{ accessToken, refreshToken, user }`|
-| POST   | /auth/login     | `{ email, password }`                  | `{ accessToken, refreshToken, user }`|
-| POST   | /auth/refresh   | `{ refreshToken }`                     | `{ accessToken, refreshToken, user }`|
-| POST   | /auth/logout    | Header `Authorization: Bearer <token>` | `{ loggedOut: true }`               |
-
-### Endpoints de tareas (requieren `Authorization: Bearer <token>`)
-
-| Método | Ruta         | Descripción                          |
-|--------|--------------|----------------------------------------|
-| GET    | /tasks       | Lista las tareas del usuario logueado |
-| GET    | /tasks/:id   | Obtiene una tarea (si es tuya)        |
-| POST   | /tasks       | Crea una tarea (`{title}`)             |
-| PATCH  | /tasks/:id   | Actualiza (título/estado)              |
-| DELETE | /tasks/:id   | Elimina una tarea                      |
-
-Si el token falta, venció o es inválido, estas rutas devuelven `401`. Si el token es válido pero la tarea es de otro usuario, devuelven `403`.
-
-Podés inspeccionar la base de datos con `npx prisma studio` (abre una UI en el navegador).
-
-## Auth: access token + refresh token
-
-- **Access token** (15 min, `JWT_ACCESS_SECRET`): va en `Authorization: Bearer <token>` en cada request a `/tasks`. Corto a propósito: si se filtra, el daño posible dura poco.
-- **Refresh token** (7 días, `JWT_REFRESH_SECRET`): solo sirve para pedir un access token nuevo en `POST /auth/refresh`. Se guarda **hasheado** en la columna `hashedRefreshToken` de `User`, igual que la contraseña.
-- **Rotación**: cada vez que se usa un refresh token para renovar, el backend genera un par nuevo (access + refresh) y descarta el hash viejo. Si alguien reutiliza un refresh token ya usado, el hash no matchea y el backend responde `401`.
-- **Logout real**: `POST /auth/logout` (requiere access token vigente) borra el `hashedRefreshToken` del usuario en la DB, así que ese refresh token queda inválido aunque todavía no haya vencido.
-- El frontend (`lib/api.ts`) intercepta cualquier `401` en `/tasks`, intenta renovar sola con `POST /auth/refresh`, reintenta la request original una vez, y si el refresh también falla, recién ahí manda al usuario a `/login`.
-
-## Frontend — Next.js
+## Frontend — setup local
 
 ```bash
 cd frontend
@@ -110,31 +35,125 @@ npm run dev
 
 Levanta en `http://localhost:3000`.
 
-- `/register` y `/login` — crean cuenta o inician sesión y guardan el JWT en `localStorage`.
-- `/` — página de tareas, protegida: si no hay token válido, redirige a `/login`. Todas las llamadas a `/tasks` mandan el header `Authorization: Bearer <token>` automáticamente (ver `lib/api.ts`).
-- Si el backend responde `401` (token vencido), el frontend limpia el token y redirige a `/login` solo.
+## Endpoints
 
-## Puntos clave del proyecto (para explicarlo en una entrevista o README de perfil)
+### Auth (públicos, salvo `/auth/logout`)
 
-- **Hash de contraseñas**: nunca se guarda la contraseña en texto plano, se usa `bcrypt` (`AuthService.register`).
-- **JWT stateless**: el backend no guarda sesiones, solo firma un token con `sub` (id de usuario) y `email`, y lo valida en cada request vía `JwtStrategy` + `JwtAuthGuard`.
-- **Autorización por dueño de recurso**: `TasksService.findOneOwned` chequea que la tarea pertenezca al usuario del token antes de dejarlo editar/borrar (si no, `403 Forbidden`).
-- **Prisma como capa de datos**: el `schema.prisma` define `User` y `Task` con una relación 1-a-N; migrar a Postgres en producción es solo cambiar el `provider` del datasource.
-- **Testing en capas**: unit tests con todo mockeado (rápidos, prueban lógica) y e2e tests contra la app real con una DB de prueba separada (más lentos, prueban que todo esté bien conectado). Es el mismo criterio que vas a ver en cualquier repo de nivel producción.
-- **Documentación con Swagger**: `@nestjs/swagger` genera la doc a partir de los mismos DTOs que ya validan el input (`@ApiProperty` conviven con los decorators de `class-validator`), así que la documentación nunca queda desincronizada del código real.
-- **CORS**: sigue habilitado explícitamente para `http://localhost:3000` en `main.ts`.
-- **Manejo de sesión en el cliente**: `lib/auth.ts` centraliza guardar/leer/borrar el token; `lib/api.ts` lo inyecta en cada fetch y desloguea automáticamente ante un `401`.
+| Método | Ruta            | Body / Auth                          | Notas                                          |
+|--------|-----------------|----------------------------------------|-------------------------------------------------|
+| POST   | /auth/register  | `{ email, password }`                  | Máx. 10/min por IP. Siempre crea role `USER`.  |
+| POST   | /auth/login     | `{ email, password }`                  | Máx. 5/min por IP (anti fuerza bruta).         |
+| POST   | /auth/refresh   | `{ refreshToken }`                     | Rota el refresh token.                          |
+| POST   | /auth/logout    | Header `Authorization: Bearer <token>` | Invalida el refresh token guardado.            |
 
-## Cómo subir esto a tu propio repo de GitHub
+### Tasks (requieren `Authorization: Bearer <accessToken>`)
 
-```bash
-cd fullstack-tasks-app
-git init
-git add .
-git commit -m "Initial commit: Next.js + NestJS + JWT auth + Prisma"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/NOMBRE_DEL_REPO.git
-git push -u origin main
+| Método | Ruta            | Descripción                                    |
+|--------|-----------------|--------------------------------------------------|
+| GET    | /tasks          | Tareas del usuario logueado                      |
+| GET    | /tasks/admin/all| **Solo ADMIN** — tareas de todos los usuarios    |
+| GET    | /tasks/:id      | Una tarea propia                                 |
+| POST   | /tasks          | Crea una tarea (`{title}`)                       |
+| PATCH  | /tasks/:id      | Actualiza título/estado                          |
+| DELETE | /tasks/:id      | Elimina una tarea propia                         |
+
+### Users (requieren `Authorization: Bearer <accessToken>`)
+
+| Método | Ruta               | Descripción                                  |
+|--------|--------------------|-------------------------------------------------|
+| GET    | /users/me          | Perfil propio (email, role, avatarUrl)         |
+| GET    | /users             | **Solo ADMIN** — lista todos los usuarios       |
+| POST   | /users/me/avatar   | Sube el avatar (`multipart/form-data`, campo `file`, PNG/JPEG/WEBP, máx. 2MB) |
+
+## Roles (RBAC)
+
+Cada `User` tiene un `role`: `USER` (default) o `ADMIN`. El role viaja **adentro del JWT** (se firma en `AuthService.issueTokens`), así que `RolesGuard` no necesita ir a buscarlo a la base en cada request — solo lee el token ya validado por `JwtAuthGuard`.
+
+```ts
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
+@Get('admin/all')
+findAllAsAdmin() { ... }
 ```
 
-(Creá antes el repo vacío en GitHub, sin README, para que no choque con el `git push`. El `.gitignore` ya excluye `node_modules`, `.env` y el archivo `dev.db`.)
+**Nadie puede auto-asignarse ADMIN**: el registro (`/auth/register`) siempre crea usuarios `USER`. Para promover a alguien a admin (solo vos, a mano, mientras aprendés):
+
+```bash
+npx prisma studio
+# Users → editá la fila → role: ADMIN → save
+```
+
+Ojo: como el role queda "congelado" dentro del JWT al momento de loguearse, si promovés a un usuario que ya tenía sesión iniciada, tiene que volver a loguearse (o esperar a que su access token expire y se refresque) para que el nuevo role se refleje.
+
+## Manejo de errores
+
+`AllExceptionsFilter` (filtro global en `main.ts`) intercepta **todas** las excepciones —las esperadas (`404`, `403`, `409`, errores de validación) y las inesperadas (bugs, `500`)— y siempre devuelve la misma forma:
+
+```json
+{
+  "statusCode": 404,
+  "error": "Not Found",
+  "message": "Task #5 no encontrada",
+  "path": "/tasks/5",
+  "timestamp": "2026-09-14T18:00:00.000Z"
+}
+```
+
+Los `500` además se loggean del lado del servidor con el stack completo (nunca se lo mandamos al cliente). Los `4xx` no se loggean como error: son tráfico normal (alguien mandó mal un dato, no es un bug).
+
+## Rate limiting
+
+`@nestjs/throttler`, con un límite general de 100 req/min por IP para toda la API, y límites más estrictos en los endpoints de auth: **5/min en `/auth/login`**, 10/min en `/auth/register`. Si alguien intenta adivinar contraseñas a fuerza bruta, se frena ahí.
+
+## Subida de archivos
+
+`POST /users/me/avatar` recibe la imagen con `multer` (`FileInterceptor`), la guarda en `backend/uploads/` con un nombre random (`randomUUID()`, nunca el nombre original del archivo — evita path traversal y colisiones), valida el tipo (`image/png`, `image/jpeg`, `image/webp`) y el tamaño (máx. 2MB) **antes** de guardarla, y sirve la carpeta como estática (`app.useStaticAssets` en `main.ts`), así queda accesible en `http://localhost:4000/uploads/<archivo>`.
+
+En el frontend, `lib/users.ts` maneja el upload con `FormData` (sin poner `Content-Type` a mano — el navegador arma el boundary del `multipart/form-data` solo). La home muestra el avatar arriba de la lista de tareas; click para cambiarlo.
+
+## Testing
+
+### Backend
+
+```bash
+cd backend
+npm test          # unit — todo mockeado (Prisma, JWT, bcrypt), rápido
+npm run test:e2e  # e2e — app real contra Postgres de test (tasks_test)
+```
+
+`pretest:e2e` sincroniza el schema en `tasks_test` (`prisma db push`) antes de cada corrida.
+
+### Frontend
+
+```bash
+cd frontend
+npm test
+```
+
+Jest + React Testing Library (config con `next/jest`), todo mockeado (`lib/auth`, `lib/api`, `fetch`) — nunca pega contra un backend real.
+
+## Deploy real
+
+### Backend → Render
+
+1. Subí una base Postgres gestionada (Render, Neon o Supabase — cualquiera te da una `DATABASE_URL`).
+2. En Render: **New → Blueprint**, apuntá al repo — Render lee `render.yaml` (en la raíz) y configura el servicio solo.
+3. Completá a mano en el dashboard las env vars marcadas `sync: false`: `DATABASE_URL` (la de tu Postgres) y `FRONTEND_URL` (la URL que te dé Vercel en el paso siguiente).
+4. `JWT_ACCESS_SECRET` y `JWT_REFRESH_SECRET` se generan solos (`generateValue: true`).
+5. El `startCommand` corre `prisma migrate deploy` antes de levantar el server, así las migraciones se aplican solas en cada deploy.
+
+### Frontend → Vercel
+
+1. Import Project desde el repo de GitHub, **Root Directory: `frontend`**.
+2. Variable de entorno: `NEXT_PUBLIC_API_URL` = la URL que te dio Render (ej. `https://next-nest-app-backend.onrender.com`).
+3. Deploy. Vercel detecta Next.js solo, no hace falta config adicional.
+
+Con los dos deploys hechos, actualizá `FRONTEND_URL` en Render con la URL final de Vercel (para que CORS deje pasar las requests) y volvé a desplegar el backend.
+
+## Subir tus cambios a GitHub
+
+```bash
+git add .
+git commit -m "..."
+git push
+```

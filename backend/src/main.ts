@@ -1,10 +1,13 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { join } from 'path';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Habilita CORS para que el frontend de Next.js (puerto 3000)
   // pueda consumir esta API (puerto 4000).
@@ -17,11 +20,22 @@ async function bootstrap() {
   // Valida automáticamente los DTOs de entrada (title requerido, etc.)
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
+  // Formatea TODOS los errores de la API con la misma forma
+  // { statusCode, error, message, path, timestamp }, incluyendo los 500
+  // no anticipados (sin filtrar stack traces al cliente).
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Sirve los archivos subidos (avatares) como archivos estáticos:
+  // http://localhost:4000/uploads/<nombre-de-archivo>
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads',
+  });
+
   // --- Swagger / OpenAPI ---
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Tasks API')
     .setDescription(
-      'API de ejemplo con auth JWT (access + refresh tokens) y CRUD de tareas por usuario.',
+      'API de ejemplo con auth JWT (access + refresh tokens), roles, subida de archivos y CRUD de tareas por usuario.',
     )
     .setVersion('1.0')
     .addBearerAuth(
@@ -31,7 +45,7 @@ async function bootstrap() {
         bearerFormat: 'JWT',
         description: 'Pegá acá el accessToken que devuelve /auth/login',
       },
-      'access-token', // nombre de referencia, se usa en @ApiBearerAuth('access-token')
+      'access-token',
     )
     .build();
 

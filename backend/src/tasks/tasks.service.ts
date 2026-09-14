@@ -14,6 +14,14 @@ export class TasksService {
     });
   }
 
+  /** Solo para admins: todas las tareas de todos los usuarios. */
+  findAllAsAdmin() {
+    return this.prisma.task.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { user: { select: { id: true, email: true } } },
+    });
+  }
+
   async findOneOwned(id: number, userId: number) {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {

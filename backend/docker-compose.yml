@@ -1,0 +1,18 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasks_dev
+    ports:
+      - '5432:5432'
+    volumes:
+      - tasks_postgres_data:/var/lib/postgresql/data
+      # Se ejecuta una sola vez, cuando el volumen está vacío (primer arranque):
+      # crea además la base "tasks_test" que usan los tests e2e.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
+
+volumes:
+  tasks_postgres_data:

@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -20,6 +21,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Crea un usuario nuevo y devuelve sus tokens' })
   @ApiResponse({ status: 201, description: 'Usuario creado' })
   @ApiResponse({ status: 409, description: 'El email ya está registrado' })
+  // Máximo 10 registros por minuto por IP: evita que un script cree miles
+  // de cuentas en loop.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -28,6 +32,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Inicia sesión y devuelve access + refresh token' })
   @ApiResponse({ status: 200, description: 'Login exitoso' })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
+  // El endpoint más sensible a fuerza bruta: máximo 5 intentos por minuto
+  // por IP. Si alguien intenta adivinar contraseñas, se frena acá.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);

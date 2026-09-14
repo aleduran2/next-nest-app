@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tasksApi } from '@/lib/api';
 import { auth } from '@/lib/auth';
+import { usersApi, avatarSrc, UserProfile } from '@/lib/users';
 import { Task } from '@/types/task';
 
 export default function HomePage() {
@@ -12,6 +13,8 @@ export default function HomePage() {
   const [newTitle, setNewTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   async function loadTasks() {
     try {
@@ -35,7 +38,22 @@ export default function HomePage() {
       return;
     }
     loadTasks();
+    usersApi.getMe().then(setProfile).catch(() => {});
   }, [router]);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const updated = await usersApi.uploadAvatar(file);
+      setProfile(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al subir el avatar');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   async function handleLogout() {
     await auth.logout();
@@ -63,7 +81,41 @@ export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col items-center p-8 sm:p-24">
       <div className="w-full max-w-md flex items-center justify-between mb-2">
-        <h1 className="text-4xl font-bold">Tasks</h1>
+        <div className="flex items-center gap-3">
+          <label className="cursor-pointer">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+            {profile?.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarSrc(profile.avatarUrl) ?? undefined}
+                alt="Tu avatar"
+                className="w-10 h-10 rounded-full object-cover border border-slate-700"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+                {uploadingAvatar ? '...' : '+'}
+              </div>
+            )}
+          </label>
+          <div>
+            <h1 className="text-4xl font-bold leading-none">Tasks</h1>
+            {profile && (
+              <span className="text-xs text-slate-500">
+                {profile.email}
+                {profile.role === 'ADMIN' && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded bg-indigo-600 text-white text-[10px] font-semibold">
+                    ADMIN
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
+        </div>
         <button
           onClick={handleLogout}
           className="text-sm text-slate-400 hover:text-red-400 transition"

@@ -52,7 +52,7 @@ describe('AuthService', () => {
     it('hashea la contraseña y devuelve accessToken + refreshToken', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-value');
-      prismaMock.user.create.mockResolvedValue({ id: 1, email: 'a@a.com' });
+      prismaMock.user.create.mockResolvedValue({ id: 1, email: 'a@a.com', role: 'USER' });
       jwtMock.sign
         .mockReturnValueOnce('access-token')
         .mockReturnValueOnce('refresh-token');
@@ -68,7 +68,7 @@ describe('AuthService', () => {
       expect(result).toEqual({
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
-        user: { id: 1, email: 'a@a.com' },
+        user: { id: 1, email: 'a@a.com', role: 'USER' },
       });
     });
   });

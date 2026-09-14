@@ -15,6 +15,9 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, CurrentUserPayload } from '../auth/current-user.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '../common/enums/role.enum';
 
 // Todas las rutas de este controller requieren un JWT válido
 // (header: Authorization: Bearer <token>)
@@ -29,6 +32,16 @@ export class TasksController {
   @Get()
   findAll(@CurrentUser() user: CurrentUserPayload) {
     return this.tasksService.findAll(user.userId);
+  }
+
+  @ApiOperation({
+    summary: '[Solo admin] Lista TODAS las tareas de TODOS los usuarios',
+  })
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @Get('admin/all')
+  findAllAsAdmin() {
+    return this.tasksService.findAllAsAdmin();
   }
 
   @ApiOperation({ summary: 'Obtiene una tarea propia por id' })
