@@ -11,11 +11,12 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String // hash con bcrypt, nunca texto plano
-  createdAt DateTime @default(now())
-  tasks     Task[]
+  id                  Int      @id @default(autoincrement())
+  email               String   @unique
+  password            String // hash con bcrypt, nunca texto plano
+  hashedRefreshToken  String? // hash del refresh token vigente, null si no hay sesión activa
+  createdAt           DateTime @default(now())
+  tasks               Task[]
 }
 
 model Task {

@@ -3,23 +3,32 @@ import { auth } from './auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = auth.getToken();
-
-  const res = await fetch(`${API_URL}${path}`, {
+async function rawFetch(path: string, options: RequestInit, token: string | null) {
+  return fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options?.headers ?? {}),
+      ...(options.headers ?? {}),
     },
   });
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let res = await rawFetch(path, options, auth.getAccessToken());
 
   if (res.status === 401) {
-    // Token vencido o inválido: mandamos al usuario a loguearse de nuevo
-    auth.logout();
-    if (typeof window !== 'undefined') window.location.href = '/login';
-    throw new Error('Sesión expirada');
+    // El access token venció: intentamos renovarlo con el refresh token
+    // y reintentamos la request UNA vez con el token nuevo.
+    const newAccessToken = await auth.refreshAccessToken();
+
+    if (!newAccessToken) {
+      auth.clearTokens();
+      if (typeof window !== 'undefined') window.location.href = '/login';
+      throw new Error('Sesión expirada');
+    }
+
+    res = await rawFetch(path, options, newAccessToken);
   }
 
   if (!res.ok) {

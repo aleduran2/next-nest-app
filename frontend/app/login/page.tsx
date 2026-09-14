@@ -17,8 +17,8 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const { accessToken } = await auth.login(email, password);
-      auth.saveToken(accessToken);
+      const { accessToken, refreshToken } = await auth.login(email, password);
+      auth.saveTokens(accessToken, refreshToken);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');

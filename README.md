@@ -24,12 +24,14 @@ npm run start:dev
 
 Levanta en `http://localhost:4000`.
 
-### Endpoints de auth (públicos)
+### Endpoints de auth (públicos, salvo `/auth/logout`)
 
-| Método | Ruta            | Body                        | Devuelve                  |
-|--------|-----------------|------------------------------|----------------------------|
-| POST   | /auth/register  | `{ email, password }`        | `{ accessToken, user }`    |
-| POST   | /auth/login     | `{ email, password }`        | `{ accessToken, user }`    |
+| Método | Ruta            | Body / Auth                          | Devuelve                            |
+|--------|-----------------|----------------------------------------|--------------------------------------|
+| POST   | /auth/register  | `{ email, password }`                  | `{ accessToken, refreshToken, user }`|
+| POST   | /auth/login     | `{ email, password }`                  | `{ accessToken, refreshToken, user }`|
+| POST   | /auth/refresh   | `{ refreshToken }`                     | `{ accessToken, refreshToken, user }`|
+| POST   | /auth/logout    | Header `Authorization: Bearer <token>` | `{ loggedOut: true }`               |
 
 ### Endpoints de tareas (requieren `Authorization: Bearer <token>`)
 
@@ -44,6 +46,14 @@ Levanta en `http://localhost:4000`.
 Si el token falta, venció o es inválido, estas rutas devuelven `401`. Si el token es válido pero la tarea es de otro usuario, devuelven `403`.
 
 Podés inspeccionar la base de datos con `npx prisma studio` (abre una UI en el navegador).
+
+## Auth: access token + refresh token
+
+- **Access token** (15 min, `JWT_ACCESS_SECRET`): va en `Authorization: Bearer <token>` en cada request a `/tasks`. Corto a propósito: si se filtra, el daño posible dura poco.
+- **Refresh token** (7 días, `JWT_REFRESH_SECRET`): solo sirve para pedir un access token nuevo en `POST /auth/refresh`. Se guarda **hasheado** en la columna `hashedRefreshToken` de `User`, igual que la contraseña.
+- **Rotación**: cada vez que se usa un refresh token para renovar, el backend genera un par nuevo (access + refresh) y descarta el hash viejo. Si alguien reutiliza un refresh token ya usado, el hash no matchea y el backend responde `401`.
+- **Logout real**: `POST /auth/logout` (requiere access token vigente) borra el `hashedRefreshToken` del usuario en la DB, así que ese refresh token queda inválido aunque todavía no haya vencido.
+- El frontend (`lib/api.ts`) intercepta cualquier `401` en `/tasks`, intenta renovar sola con `POST /auth/refresh`, reintenta la request original una vez, y si el refresh también falla, recién ahí manda al usuario a `/login`.
 
 ## Frontend — Next.js
 

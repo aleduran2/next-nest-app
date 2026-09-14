@@ -17,8 +17,8 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      const { accessToken } = await auth.register(email, password);
-      auth.saveToken(accessToken);
+      const { accessToken, refreshToken } = await auth.register(email, password);
+      auth.saveTokens(accessToken, refreshToken);
       router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al registrarse');

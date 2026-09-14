@@ -8,10 +8,7 @@ import { JwtStrategy } from './jwt.strategy';
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({
-      secret: process.env.JWT_SECRET ?? 'dev-secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN ?? '1d' },
-    }),
+    JwtModule.register({}), // los secrets se pasan explícitamente en cada sign()/verify()
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

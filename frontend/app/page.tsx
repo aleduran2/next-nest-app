@@ -28,16 +28,17 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    // Si no hay token, ni intentamos pedir tareas: vamos directo al login.
-    if (!auth.getToken()) {
+    // Si no hay access token, ni intentamos pedir tareas: vamos directo al login.
+    // (Si el access token venció pero hay refresh token, lib/api.ts lo renueva solo.)
+    if (!auth.getAccessToken() && !auth.getRefreshToken()) {
       router.replace('/login');
       return;
     }
     loadTasks();
   }, [router]);
 
-  function handleLogout() {
-    auth.logout();
+  async function handleLogout() {
+    await auth.logout();
     router.push('/login');
   }
 
