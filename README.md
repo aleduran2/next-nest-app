@@ -24,7 +24,47 @@ npm run start:dev
 
 Levanta en `http://localhost:4000`.
 
-### Documentación interactiva (Swagger)
+### Testing
+
+Hay dos capas de tests, separadas a propósito:
+
+### Unit tests (`npm test`)
+
+```bash
+cd backend
+npm test          # corre todos los *.spec.ts
+npm run test:cov  # con reporte de coverage
+```
+
+Prueban `TasksService` y `AuthService` **con Prisma, JwtService y bcrypt mockeados** (`jest.mock`, `Test.createTestingModule` con providers falsos). No tocan ninguna base de datos ni hacen requests HTTP reales — son rápidos y deterministas, y sirven para validar la lógica de negocio (por ejemplo: "un usuario no puede editar la tarea de otro", "un refresh token ya rotado se rechaza").
+
+### E2E tests (`npm run test:e2e`)
+
+```bash
+cd backend
+npm run test:e2e
+```
+
+Levantan la aplicación NestJS completa (con Prisma real) contra una base SQLite separada (`prisma/test.db`, distinta de tu `dev.db`), y hacen requests HTTP de punta a punta con `supertest`: registro → login → crear tarea → completarla → intentar tocarla con otro usuario (403) → refrescar el token → logout. El script `pretest:e2e` se encarga de recrear `test.db` desde cero antes de cada corrida (`prisma db push`), así que siempre arranca limpia.
+
+No hace falta el backend corriendo en otra terminal para estos tests — Nest levanta una instancia de la app en memoria solo para el test.
+
+## Testing del frontend
+
+```bash
+cd frontend
+npm test          # corre todos los *.test.ts / *.test.tsx
+npm run test:watch
+```
+
+Usa **Jest + React Testing Library**, configurado con el helper oficial `next/jest` (maneja SWC, CSS y el App Router sin config manual de Babel). Todo mockeado — nunca pega contra un backend real:
+
+- `lib/auth.test.ts` — guarda/lee tokens en `localStorage`, maneja errores de login/refresh.
+- `lib/api.test.ts` — el caso más importante: verifica que ante un `401` la request se reintenta automáticamente con un token renovado, y que si el refresh también falla, limpia la sesión sin loopear.
+- `app/login/page.test.tsx`, `app/register/page.test.tsx` — completan el formulario con `@testing-library/user-event` y verifican que se llama a `auth.login`/`auth.register` y se redirige.
+- `app/page.test.tsx` — la home redirige a `/login` sin sesión, carga tareas con sesión, y permite crear una tarea nueva desde el formulario.
+
+## Documentación interactiva (Swagger)
 
 Con el backend corriendo, abrí **http://localhost:4000/api/docs** — ahí podés ver todos los endpoints, probar `/auth/register` y `/auth/login` directamente desde el navegador, copiar el `accessToken` que te devuelven, pegarlo en el botón **Authorize** (🔒) de arriba a la derecha, y a partir de ahí probar los endpoints de `/tasks` ya autenticado.
 
@@ -80,6 +120,7 @@ Levanta en `http://localhost:3000`.
 - **JWT stateless**: el backend no guarda sesiones, solo firma un token con `sub` (id de usuario) y `email`, y lo valida en cada request vía `JwtStrategy` + `JwtAuthGuard`.
 - **Autorización por dueño de recurso**: `TasksService.findOneOwned` chequea que la tarea pertenezca al usuario del token antes de dejarlo editar/borrar (si no, `403 Forbidden`).
 - **Prisma como capa de datos**: el `schema.prisma` define `User` y `Task` con una relación 1-a-N; migrar a Postgres en producción es solo cambiar el `provider` del datasource.
+- **Testing en capas**: unit tests con todo mockeado (rápidos, prueban lógica) y e2e tests contra la app real con una DB de prueba separada (más lentos, prueban que todo esté bien conectado). Es el mismo criterio que vas a ver en cualquier repo de nivel producción.
 - **Documentación con Swagger**: `@nestjs/swagger` genera la doc a partir de los mismos DTOs que ya validan el input (`@ApiProperty` conviven con los decorators de `class-validator`), así que la documentación nunca queda desincronizada del código real.
 - **CORS**: sigue habilitado explícitamente para `http://localhost:3000` en `main.ts`.
 - **Manejo de sesión en el cliente**: `lib/auth.ts` centraliza guardar/leer/borrar el token; `lib/api.ts` lo inyecta en cada fetch y desloguea automáticamente ante un `401`.
