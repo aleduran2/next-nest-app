@@ -9,6 +9,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
@@ -17,16 +18,20 @@ import { CurrentUser, CurrentUserPayload } from '../auth/current-user.decorator'
 
 // Todas las rutas de este controller requieren un JWT válido
 // (header: Authorization: Bearer <token>)
+@ApiTags('tasks')
+@ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
+  @ApiOperation({ summary: 'Lista las tareas del usuario autenticado' })
   @Get()
   findAll(@CurrentUser() user: CurrentUserPayload) {
     return this.tasksService.findAll(user.userId);
   }
 
+  @ApiOperation({ summary: 'Obtiene una tarea propia por id' })
   @Get(':id')
   findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -35,11 +40,13 @@ export class TasksController {
     return this.tasksService.findOneOwned(id, user.userId);
   }
 
+  @ApiOperation({ summary: 'Crea una tarea nueva para el usuario autenticado' })
   @Post()
   create(@Body() dto: CreateTaskDto, @CurrentUser() user: CurrentUserPayload) {
     return this.tasksService.create(dto, user.userId);
   }
 
+  @ApiOperation({ summary: 'Actualiza título y/o estado de una tarea propia' })
   @Patch(':id')
   update(
     @Param('id', ParseIntPipe) id: number,
@@ -49,6 +56,7 @@ export class TasksController {
     return this.tasksService.update(id, dto, user.userId);
   }
 
+  @ApiOperation({ summary: 'Elimina una tarea propia' })
   @Delete(':id')
   async remove(
     @Param('id', ParseIntPipe) id: number,

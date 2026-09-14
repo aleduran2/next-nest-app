@@ -24,6 +24,10 @@ npm run start:dev
 
 Levanta en `http://localhost:4000`.
 
+### Documentación interactiva (Swagger)
+
+Con el backend corriendo, abrí **http://localhost:4000/api/docs** — ahí podés ver todos los endpoints, probar `/auth/register` y `/auth/login` directamente desde el navegador, copiar el `accessToken` que te devuelven, pegarlo en el botón **Authorize** (🔒) de arriba a la derecha, y a partir de ahí probar los endpoints de `/tasks` ya autenticado.
+
 ### Endpoints de auth (públicos, salvo `/auth/logout`)
 
 | Método | Ruta            | Body / Auth                          | Devuelve                            |
@@ -76,6 +80,7 @@ Levanta en `http://localhost:3000`.
 - **JWT stateless**: el backend no guarda sesiones, solo firma un token con `sub` (id de usuario) y `email`, y lo valida en cada request vía `JwtStrategy` + `JwtAuthGuard`.
 - **Autorización por dueño de recurso**: `TasksService.findOneOwned` chequea que la tarea pertenezca al usuario del token antes de dejarlo editar/borrar (si no, `403 Forbidden`).
 - **Prisma como capa de datos**: el `schema.prisma` define `User` y `Task` con una relación 1-a-N; migrar a Postgres en producción es solo cambiar el `provider` del datasource.
+- **Documentación con Swagger**: `@nestjs/swagger` genera la doc a partir de los mismos DTOs que ya validan el input (`@ApiProperty` conviven con los decorators de `class-validator`), así que la documentación nunca queda desincronizada del código real.
 - **CORS**: sigue habilitado explícitamente para `http://localhost:3000` en `main.ts`.
 - **Manejo de sesión en el cliente**: `lib/auth.ts` centraliza guardar/leer/borrar el token; `lib/api.ts` lo inyecta en cada fetch y desloguea automáticamente ante un `401`.
 
